@@ -25,9 +25,9 @@
 // };
 
 char *monitor[] = {
-    "0x1429",  // square
-    "0x1c70",  // multiply
-    "0x1ca2"   // reduce
+    "square",  // square
+    "multiply",  // multiply
+    "reduce"   // reduce
 };
 
 int nmonitor = sizeof(monitor)/sizeof(monitor[0]);

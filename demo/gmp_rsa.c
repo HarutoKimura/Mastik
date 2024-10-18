@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <gmp.h>
-#include <emmintrin.h>
 
 // extern void reduce(mpz_t result, const mpz_t x, const mpz_t p);
 // volatile char padding1[16384] = {0};
@@ -56,15 +55,12 @@ void modular_exponentiation(mpz_t result, const mpz_t b, const mpz_t d, const mp
     for (int i = num_bits - 1; i >= 0; i--) {
         // Square
         square(temp, x);
-        _mm_mfence();  // Memory barrier
         reduce(x, temp, p);
-         _mm_mfence();  // Memory barrier
         // square_and_reduce(temp, x, p);
 
         // Multiply (if the bit is set)
         if (mpz_tstbit(d, i)) {
             multiply(temp, x, b);
-            _mm_mfence();  // Memory barrier
             reduce(x, temp, p);
             // multiply_and_reduce(temp, x, b, p);
         }

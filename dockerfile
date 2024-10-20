@@ -16,7 +16,7 @@ RUN pip3 install pandas matplotlib
 RUN git clone --branch feature/flush_reload https://github.com/HarutoKimura/mastik.git /mastik
 
 # Set the working directory
-WORKDIR /mastik
+WORKDIR /mastik/demo/group13_flush_and_reload_experiment
 
 # Configure and build Mastik
 RUN ./configure && make && make install

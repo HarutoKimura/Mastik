@@ -2,49 +2,17 @@
 #include <stdlib.h>
 #include <gmp.h>
 
-// extern void reduce(mpz_t result, const mpz_t x, const mpz_t p);
-// volatile char padding1[16384] = {0};
-
 void square(mpz_t result, const mpz_t x) {
-    // printf("Square function address: %p\n", (void*)square);
     static int count = 0;
     printf("Square called: %d times\n", ++count);
     mpz_mul(result, x, x);
 }
 
-// volatile char padding2[16384] = {0};
-
-
-// void multiply(mpz_t result, const mpz_t x, const mpz_t b) {
-//     printf("Multiply function address: %p\n", (void*)multiply);
-//     mpz_mul(result, x, b);
-// }
-
-// volatile char padding2[16384] = {0};
-
-// void reduce(mpz_t result, const mpz_t x, const mpz_t p) {
-//     printf("Reduce function address: %p\n", (void*)reduce);
-//     mpz_mod(result, x, p);
-// }
-
-// void square_and_reduce(mpz_t result, const mpz_t x, const mpz_t p) {
-//     mpz_t temp;
-//     mpz_init(temp);
-
-//     square(temp, x);
-//     reduce(result, temp, p);
-
-//     mpz_clear(temp);
-// }
-
-// extern void square(mpz_t result, const mpz_t x);
+// calling from the other file to ensure square and multiply have the enough memory distace from each other
 extern void multiply(mpz_t result, const mpz_t x, const mpz_t b);
 extern void reduce(mpz_t result, const mpz_t x, const mpz_t p);
 
-// extern void multiply_and_reduce(mpz_t result, const mpz_t x, const mpz_t b, const mpz_t p);
-
-// vulnerable modular exponentiation function
-// square and multiply functions
+// vulnerable modular exponentiation function (without constant-time)
 void modular_exponentiation(mpz_t result, const mpz_t b, const mpz_t d, const mpz_t p) {
     mpz_t x, temp;
     mpz_init_set_ui(x, 1);
@@ -56,13 +24,11 @@ void modular_exponentiation(mpz_t result, const mpz_t b, const mpz_t d, const mp
         // Square
         square(temp, x);
         reduce(x, temp, p);
-        // square_and_reduce(temp, x, p);
 
-        // Multiply (if the bit is set)
+        // Multiply (only if the d_i bit is 1)
         if (mpz_tstbit(d, i)) {
             multiply(temp, x, b);
             reduce(x, temp, p);
-            // multiply_and_reduce(temp, x, b, p);
         }
     }
 
@@ -72,11 +38,13 @@ void modular_exponentiation(mpz_t result, const mpz_t b, const mpz_t d, const mp
 }
 
 
+// RSA public key structure
 typedef struct {
     mpz_t n;  /* modulus */
     mpz_t e;  /* public exponent */
 } RSA_public_key;
 
+// RSA secret key structure
 typedef struct {
     mpz_t n;  /* modulus */
     mpz_t e;  /* public exponent */
@@ -86,7 +54,8 @@ typedef struct {
     mpz_t u;  /* inverse of p mod q */
 } RSA_secret_key;
 
-void rsa_generate_key(RSA_secret_key *sk, int nbits, const char *d_str) {
+// RSA key generation
+void rsa_generate_key(RSA_secret_key *sk, int nbits) {
     gmp_randstate_t state;
     mpz_t phi, p_minus_1, q_minus_1, gcd;
 
@@ -116,14 +85,10 @@ void rsa_generate_key(RSA_secret_key *sk, int nbits, const char *d_str) {
     mpz_mul(phi, p_minus_1, q_minus_1);
 
     // Choose e
-    mpz_init_set_ui(sk->e, 3);
-
-    // Instead of computing d, set it to the provided value
-    mpz_init_set_str(sk->d, d_str, 0);  // 0 means auto-detect base
-
+    mpz_init_set_ui(sk->e, 65537);  // following GnuPG 
 
     // Compute d = e^(-1) mod phi
-    // mpz_init(sk->d);
+    mpz_init(sk->d);
     mpz_invert(sk->d, sk->e, phi);
 
     // Compute u = p^(-1) mod q
@@ -137,13 +102,12 @@ void rsa_generate_key(RSA_secret_key *sk, int nbits, const char *d_str) {
     gmp_randclear(state);
 }
 
-// RSA encryption
+// RSA encryption, we don't use this in our experiment but we can use our modular exponetiation function to encrypt
 void rsa_encrypt(mpz_t result, const mpz_t message, const RSA_public_key *pk) {
-    // mpz_powm(result, message, pk->e, pk->n);
     modular_exponentiation(result, message, pk->e, pk->n);
 }
 
-// RSA decryption
+// RSA decryption, using the Chinese Remainder Theorem following GnuPG
 void rsa_decrypt(mpz_t result, const mpz_t ciphertext, const RSA_secret_key *sk) {
     mpz_t m1, m2, h;
     mpz_init(m1);
@@ -153,13 +117,13 @@ void rsa_decrypt(mpz_t result, const mpz_t ciphertext, const RSA_secret_key *sk)
     // m1 = c^(d mod (p-1)) mod p
     mpz_sub_ui(h, sk->p, 1);
     mpz_mod(h, sk->d, h);
-    // mpz_powm(m1, ciphertext, h, sk->p);
+
     modular_exponentiation(m1, ciphertext, h, sk->p);
 
     // m2 = c^(d mod (q-1)) mod q
     mpz_sub_ui(h, sk->q, 1);
     mpz_mod(h, sk->d, h);
-    // mpz_powm(m2, ciphertext, h, sk->q);
+
     modular_exponentiation(m2, ciphertext, h, sk->q);
 
     // h = (m2 - m1) * u mod q
@@ -171,26 +135,25 @@ void rsa_decrypt(mpz_t result, const mpz_t ciphertext, const RSA_secret_key *sk)
     mpz_mul(h, h, sk->p);
     mpz_add(result, m1, h);
 
+    // Clean up
     mpz_clear(m1);
     mpz_clear(m2);
     mpz_clear(h);
 }
 
-// RSA signature generation
-void rsa_sign(mpz_t signature, const mpz_t message, const RSA_secret_key *sk) {
+// RSA signature generation using modualr exponetiation
+void rsa_sign_with_square_and_mul(mpz_t signature, const mpz_t message, const RSA_secret_key *sk) {
     // Use vulnerable modular exponentiation for signing
     printf("Signing (using private key d):\n");
     modular_exponentiation(signature, message, sk->d, sk->n);
 }
 
-// RSA signature verification
+// RSA signature verification, in our case, we are targeting the signing process, so we are not using our modular exponetiation funciton to verify the signature
 int rsa_verify(const mpz_t message, const mpz_t signature, const RSA_public_key *pk) {
     mpz_t calculated_message;
     mpz_init(calculated_message);
     
     mpz_powm(calculated_message, signature, pk->e, pk->n); // Use standard GMP function
-    // printf("Verifying (using public key e):\n");
-    // modular_exponentiation(calculated_message, signature, pk->e, pk->n);
     
     int result = (mpz_cmp(message, calculated_message) == 0);
     mpz_clear(calculated_message);
@@ -203,17 +166,10 @@ int main() {
     RSA_public_key pk;
     mpz_t message, ciphertext, decrypted, signature;
 
-    // Generate a key with d = 2^2047 (for a 2048-bit key)
-    // This is a 2048-bit number with only the most significant bit set
-    // const char* d_str = "20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-
-    const char *d_str = "0x100000000000000";  
-
-    rsa_generate_key(&sk, 2048, d_str);
+    rsa_generate_key(&sk, 2048);
 
     mpz_init_set(pk.n, sk.n);
     mpz_init_set(pk.e, sk.e);
-
 
     // // Display public key
     // gmp_printf("Public Key:\n");
@@ -229,7 +185,6 @@ int main() {
     // gmp_printf("q (prime factor): %Zd\n", sk.q);
     // gmp_printf("u (inverse of p mod q): %Zd\n\n", sk.u);
 
-
     mpz_init_set_str(message, "1234567890", 10);
     mpz_init(ciphertext);
     mpz_init(decrypted);
@@ -240,9 +195,8 @@ int main() {
     // gmp_printf("Original : %Zd\n", message);
     // gmp_printf("Decrypted: %Zd\n", decrypted);
 
-
-    rsa_sign(signature, message, &sk);
-    gmp_printf("Signature: %Zd\n", signature);
+    rsa_sign_with_square_and_mul(signature, message, &sk);
+    // gmp_printf("Signature: %Zd\n", signature);
 
     int verified = rsa_verify(message, signature, &pk);
     printf("Signature verified: %s\n", verified ? "Yes" : "No");
@@ -252,7 +206,6 @@ int main() {
     mpz_clear(message);
     mpz_clear(ciphertext);
     mpz_clear(decrypted);
-    // Clear key structures...
 
     return 0;
 }

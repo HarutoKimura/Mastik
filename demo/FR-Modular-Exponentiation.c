@@ -7,27 +7,14 @@
 #include <mastik/fr.h>
 #include <mastik/util.h>
 
-#define SAMPLES 100000 
+#define SAMPLES 5000
 #define SLOT 2000
 #define THRESHOLD 100
 
-// //monitor each functions
-// char *monitor[] = {
-//     "Modular_Expo.c:8", 
-//     "Modular_Expo.c:13", 
-//     "Modular_Expo.c:18"  
-// };
-
-// char *monitor[] = {
-//     "gmp_rsa.c:5", 
-//     "gmp_rsa.c:19", 
-//     "gmp_rsa.c:13"  
-// };
-
 char *monitor[] = {
-    "square",  // square
-    "multiply",  // multiply
-    "reduce"   // reduce
+    "gmp_rsa.c:8",  // square 
+    "multiply.c:3",  // multiply
+    "reduce.c:3"   // reduce
 };
 
 int nmonitor = sizeof(monitor)/sizeof(monitor[0]);
